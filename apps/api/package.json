@@ -12,7 +12,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@carred/shared": "0.1.0",
     "@supabase/supabase-js": "^2.52.0",
     "bullmq": "^5.58.4",
     "ioredis": "^5.8.1",

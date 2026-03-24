@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
-import { ApiTaskCreateRequest, TASK_STATUS } from '@carred/shared';
+import { ApiTaskCreateRequest, TASK_STATUS } from '../../src/shared';
 import { requireAuth } from '../../src/auth';
 import { supabaseAdmin } from '../../src/supabase';
 import { enqueueTask } from '../../src/queue';

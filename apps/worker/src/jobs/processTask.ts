@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq';
-import type { TaskKind } from '@carred/shared';
-import { TASK_STATUS } from '@carred/shared';
+import type { TaskKind } from '../shared';
+import { TASK_STATUS } from '../shared';
 import { supabaseAdmin } from '../lib/supabase';
 
 interface JobData {
