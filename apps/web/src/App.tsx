@@ -1,42 +1,111 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
-import { useEffect } from 'react';
-import DashboardPage from './pages/DashboardPage';
-import ChatPage from './pages/ChatPage';
-import PlaceholderPage from './pages/PlaceholderPage';
-import { hydrateTokenFromHash, readToken } from './lib/auth';
+import { useState, useEffect } from 'react';
+import { Layout } from './components/Layout';
+import { Chat } from './pages/Chat';
+import { CreativeChat } from './pages/CreativeChat';
+import { Skills } from './pages/Skills';
+import { Knowledge } from './pages/Knowledge';
+import { Advisors } from './pages/Advisors';
+import { Settings } from './pages/Settings';
+import { Manuscripts } from './pages/Manuscripts';
+import { Archives } from './pages/Archives';
+import { Wander } from './pages/Wander';
+import { XhsBrowser } from './pages/XhsBrowser';
+import { RedClaw } from './pages/RedClaw';
+import { MediaLibrary } from './pages/MediaLibrary';
+import { ImageGen } from './pages/ImageGen';
 
-export default function App() {
+export type ViewType = 'chat' | 'creative-chat' | 'skills' | 'knowledge' | 'advisors' | 'settings' | 'manuscripts' | 'archives' | 'wander' | 'xhs-browser' | 'redclaw' | 'media-library' | 'image-gen';
+
+// 待发送的聊天消息（用于跨页面传递）
+export interface PendingChatMessage {
+  content: string;          // 实际发送给 AI 的完整内容
+  displayContent?: string;  // UI 上显示的简短内容
+  attachment?: {
+    type: 'youtube-video';
+    title: string;
+    thumbnailUrl?: string;
+    videoId?: string;
+  };
+}
+
+function App() {
+  const [currentView, setCurrentView] = useState<ViewType>('manuscripts');
+  const [pendingChatMessage, setPendingChatMessage] = useState<PendingChatMessage | null>(null);
+  const [pendingManuscriptFile, setPendingManuscriptFile] = useState<string | null>(null);
+  const [xhsBrowserInitialized, setXhsBrowserInitialized] = useState(false);
+  const [wanderInitialized, setWanderInitialized] = useState(false);
+
   useEffect(() => {
-    hydrateTokenFromHash();
-  }, []);
+    if (currentView === 'xhs-browser') {
+      setXhsBrowserInitialized(true);
+    }
+  }, [currentView]);
 
-  const token = readToken();
+  useEffect(() => {
+    if (currentView === 'wander') {
+      setWanderInitialized(true);
+    }
+  }, [currentView]);
+
+  // 导航到 Chat 页面并发送消息
+  const navigateToChat = (message: PendingChatMessage) => {
+    setPendingChatMessage(message);
+    setCurrentView('chat');
+  };
+
+  // Chat 页面消费消息后清除
+  const clearPendingMessage = () => {
+    setPendingChatMessage(null);
+  };
+
+  // 导航到稿件页面并打开指定文件
+  const navigateToManuscript = (filePath: string) => {
+    setPendingManuscriptFile(filePath);
+    setCurrentView('manuscripts');
+  };
+
+  // 稿件页面消费后清除
+  const clearPendingManuscriptFile = () => {
+    setPendingManuscriptFile(null);
+  };
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <div className="brand">CarRed</div>
-        <nav>
-          <Link to="/">Dashboard</Link>
-          <Link to="/chat">Chat</Link>
-          <Link to="/knowledge">Knowledge</Link>
-          <Link to="/media">Media</Link>
-          <Link to="/manuscripts">Manuscripts</Link>
-          <Link to="/redclaw">RedClaw</Link>
-        </nav>
-        <div className="token-state">Auth: {token ? 'linked' : 'missing'}</div>
-      </aside>
-      <main className="content">
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/knowledge" element={<PlaceholderPage title="Knowledge" endpoint="POST /api/tasks (workspace_index)" note="将 RedBox 知识库索引流程迁移到 Worker 后在此接入。" />} />
-          <Route path="/media" element={<PlaceholderPage title="Media" endpoint="POST /api/tasks (media_process)" note="媒体处理任务通过队列执行，结果回写 tasks/output。" />} />
-          <Route path="/manuscripts" element={<PlaceholderPage title="Manuscripts" endpoint="POST /api/workspace/fs/*" note="文稿文件读写通过云端隔离工作区 API。" />} />
-          <Route path="/redclaw" element={<PlaceholderPage title="RedClaw" endpoint="GET /api/tasks/:id/events" note="自动化流程在 Worker 执行并通过 SSE 反馈状态。" />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <>
+      <Layout currentView={currentView} onNavigate={setCurrentView}>
+        {currentView === 'chat' && (
+          <Chat
+            pendingMessage={pendingChatMessage}
+            onMessageConsumed={clearPendingMessage}
+          />
+        )}
+        {currentView === 'creative-chat' && <CreativeChat />}
+        {currentView === 'skills' && <Skills />}
+        {currentView === 'knowledge' && <Knowledge onNavigateToChat={navigateToChat} />}
+        {currentView === 'advisors' && <Advisors />}
+        {currentView === 'settings' && <Settings />}
+        {currentView === 'manuscripts' && (
+          <Manuscripts
+            pendingFile={pendingManuscriptFile}
+            onFileConsumed={clearPendingManuscriptFile}
+          />
+        )}
+        {currentView === 'archives' && <Archives />}
+        {wanderInitialized && (
+          <div className={currentView === 'wander' ? 'h-full min-h-0 flex flex-col' : 'hidden'}>
+            <Wander onNavigateToManuscript={navigateToManuscript} />
+          </div>
+        )}
+        {currentView === 'redclaw' && <RedClaw />}
+        {currentView === 'media-library' && <MediaLibrary />}
+        {currentView === 'image-gen' && <ImageGen />}
+        {xhsBrowserInitialized && (
+          <div className={currentView === 'xhs-browser' ? 'h-full min-h-0 flex flex-col' : 'hidden'}>
+            <XhsBrowser />
+          </div>
+        )}
+      </Layout>
+    </>
   );
 }
+
+export default App;
