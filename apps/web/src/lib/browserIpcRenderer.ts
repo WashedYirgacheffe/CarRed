@@ -69,6 +69,7 @@ const WANDER_HISTORY_KEY = 'carred.web.wander.history';
 const MANUSCRIPT_LAYOUT_PREFIX = 'carred.web.manuscripts.layout.';
 const MANUSCRIPT_METADATA_PREFIX = 'carred.web.manuscripts.meta.';
 const SKILLS_KEY = 'carred.web.skills';
+const LOCAL_FS_KEY = 'carred.web.local_fs';
 
 const listeners = new Map<string, Set<Listener>>();
 const chatRuntimeBySession = new Map<string, ChatRunState>();
@@ -208,9 +209,146 @@ const getActiveSpaceId = (): string => {
 
 const getManuscriptRoot = () => joinPath('spaces', getActiveSpaceId(), 'manuscripts');
 
+type LocalFsState = {
+  files: Record<string, string>;
+  dirs: string[];
+};
+
+const readLocalFsState = (): LocalFsState => {
+  const state = readJson<LocalFsState>(LOCAL_FS_KEY, { files: {}, dirs: [''] });
+  if (!Array.isArray(state.dirs) || state.dirs.length === 0) state.dirs = [''];
+  if (!state.dirs.includes('')) state.dirs.unshift('');
+  if (!state.files || typeof state.files !== 'object') state.files = {};
+  return state;
+};
+
+const writeLocalFsState = (state: LocalFsState) => {
+  const uniqueDirs = Array.from(new Set(state.dirs.map((dir) => normalizePath(dir)).concat('')));
+  writeJson(LOCAL_FS_KEY, { files: state.files, dirs: uniqueDirs });
+};
+
+const ensureDirChain = (state: LocalFsState, target: string) => {
+  const normalized = normalizePath(target);
+  if (!normalized) return;
+  const parts = normalized.split('/');
+  let acc = '';
+  for (const part of parts) {
+    acc = acc ? `${acc}/${part}` : part;
+    if (!state.dirs.includes(acc)) state.dirs.push(acc);
+  }
+};
+
+const localFs = (op: string, payload: Record<string, unknown>) => {
+  const state = readLocalFsState();
+  const path = normalizePath(String(payload.path || ''));
+  const to = normalizePath(String(payload.to || ''));
+
+  if (op === 'mkdir') {
+    ensureDirChain(state, path);
+    writeLocalFsState(state);
+    return { path, ok: true };
+  }
+
+  if (op === 'write') {
+    ensureDirChain(state, path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+    state.files[path] = String(payload.content || '');
+    writeLocalFsState(state);
+    return { path, bytes: state.files[path].length };
+  }
+
+  if (op === 'read') {
+    return { path, content: state.files[path] || '' };
+  }
+
+  if (op === 'list') {
+    const base = path;
+    const childrenMap = new Map<string, 'dir' | 'file'>();
+    const dirPrefix = base ? `${base}/` : '';
+
+    for (const dir of state.dirs) {
+      if (dir === base || (!base && dir === '')) continue;
+      if (!dir.startsWith(dirPrefix)) continue;
+      const rest = dirPrefix ? dir.slice(dirPrefix.length) : dir;
+      if (!rest) continue;
+      const name = rest.split('/')[0];
+      if (!childrenMap.has(name)) childrenMap.set(name, 'dir');
+    }
+
+    for (const filePath of Object.keys(state.files)) {
+      if (!filePath.startsWith(dirPrefix)) continue;
+      const rest = dirPrefix ? filePath.slice(dirPrefix.length) : filePath;
+      if (!rest) continue;
+      const name = rest.split('/')[0];
+      if (rest.includes('/')) {
+        if (!childrenMap.has(name)) childrenMap.set(name, 'dir');
+      } else if (!childrenMap.has(name)) {
+        childrenMap.set(name, 'file');
+      }
+    }
+
+    const entries = Array.from(childrenMap.entries())
+      .map(([name, type]) => ({ name, type }))
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    return { path: base, entries };
+  }
+
+  if (op === 'delete') {
+    if (path in state.files) {
+      delete state.files[path];
+    }
+    const prefix = path ? `${path}/` : '';
+    for (const key of Object.keys(state.files)) {
+      if (prefix && key.startsWith(prefix)) delete state.files[key];
+    }
+    state.dirs = state.dirs.filter((dir) => dir !== path && !(prefix && dir.startsWith(prefix)));
+    writeLocalFsState(state);
+    return { path, ok: true };
+  }
+
+  if (op === 'move') {
+    if (!path || !to) return { ok: false };
+    ensureDirChain(state, to.includes('/') ? to.slice(0, to.lastIndexOf('/')) : '');
+
+    if (path in state.files) {
+      state.files[to] = state.files[path];
+      delete state.files[path];
+      writeLocalFsState(state);
+      return { from: path, to, ok: true };
+    }
+
+    const fromPrefix = `${path}/`;
+    const toPrefix = `${to}/`;
+    const nextFiles: Record<string, string> = {};
+    for (const [filePath, content] of Object.entries(state.files)) {
+      if (filePath.startsWith(fromPrefix)) {
+        const suffix = filePath.slice(fromPrefix.length);
+        nextFiles[`${toPrefix}${suffix}`] = content;
+      } else {
+        nextFiles[filePath] = content;
+      }
+    }
+    state.files = nextFiles;
+
+    state.dirs = state.dirs.map((dir) => {
+      if (dir === path) return to;
+      if (dir.startsWith(fromPrefix)) return `${toPrefix}${dir.slice(fromPrefix.length)}`;
+      return dir;
+    });
+
+    writeLocalFsState(state);
+    return { from: path, to, ok: true };
+  }
+
+  return { ok: false, error: `Unsupported op: ${op}` };
+};
+
 const workspaceFs = async (op: string, payload: Record<string, unknown>) => {
   if (!API_BASE) {
-    throw new Error('VITE_API_BASE_URL is not configured');
+    return localFs(op, payload);
   }
   return requestJson(`/api/workspace/fs/${op}`, {
     method: 'POST',
@@ -822,7 +960,20 @@ const chatApi = {
 
     try {
       if (!API_BASE) {
-        throw new Error('VITE_API_BASE_URL is not configured');
+        const fallbackText = `CarRed Web 本地模式已收到：${payload.message}`;
+        await chunkText(sessionId, fallbackText);
+        appendMessage(sessionId, {
+          role: 'assistant',
+          content: fallbackText,
+        });
+        setRuntime(sessionId, {
+          isProcessing: false,
+          partialResponse: '',
+          abortController: undefined,
+        });
+        emit('chat:response-end', { sessionId });
+        emit('chat:done', { sessionId });
+        return;
       }
 
       const submit = await requestJson(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, {
