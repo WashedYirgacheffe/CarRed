@@ -1,0 +1,18 @@
+{
+  "name": "carred",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm -w apps/web run dev",
+    "dev:api": "npm -w apps/api run dev",
+    "dev:worker": "npm -w apps/worker run dev",
+    "build:web": "npm -w apps/web run build",
+    "build:api": "npm -w apps/api run build",
+    "build:worker": "npm -w apps/worker run build",
+    "typecheck": "npm -ws run typecheck"
+  }
+}

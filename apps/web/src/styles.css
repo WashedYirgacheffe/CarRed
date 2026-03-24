@@ -1,0 +1,159 @@
+:root {
+  font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #121316;
+  background: #f6f8fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+}
+
+.sidebar {
+  border-right: 1px solid #e4e8ef;
+  background: #fff;
+  padding: 20px;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar a {
+  text-decoration: none;
+  color: #475067;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.sidebar a:hover {
+  background: #eef3ff;
+  color: #1f3c88;
+}
+
+.token-state {
+  margin-top: 24px;
+  font-size: 12px;
+  color: #5d6781;
+}
+
+.content {
+  padding: 30px;
+}
+
+.page h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.sub {
+  margin-top: 8px;
+  color: #5d6781;
+}
+
+.tools-grid {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.tool-card {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #dfe6f2;
+  background: #fff;
+}
+
+.tool-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.tool-top span {
+  font-size: 11px;
+  color: #0c5e3f;
+  background: #dbf5ea;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.narrow {
+  max-width: 760px;
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid #d0d9ea;
+  border-radius: 10px;
+  padding: 12px;
+  resize: vertical;
+  margin-top: 14px;
+}
+
+button {
+  margin-top: 12px;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: #1f3c88;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #475067;
+}
+
+.error {
+  margin-top: 10px;
+  color: #d64545;
+}
+
+.panel {
+  margin-top: 16px;
+  border: 1px solid #d0d9ea;
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px;
+  color: #3a435a;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid #e4e8ef;
+  }
+}

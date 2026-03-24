@@ -1,0 +1,11 @@
+{
+  "name": "@carred/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "echo \"shared ok\""
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}
