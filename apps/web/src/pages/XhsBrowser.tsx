@@ -56,6 +56,7 @@ interface ElementLayoutSnapshot {
 interface ManagedWebviewProps {
     tab: BrowserTab;
     onRefChange: (tabId: string, webview: WebViewElement | null) => void;
+    onRuntimeModeChange: (tabId: string, isNativeWebview: boolean) => void;
     onElementLayout: (tabId: string, snapshot: ElementLayoutSnapshot) => void;
     onDidStartLoading: (tabId: string) => void;
     onDidStopLoading: (tabId: string) => void;
@@ -69,6 +70,20 @@ interface ManagedWebviewProps {
 const DEFAULT_URL = 'https://www.xiaohongshu.com/';
 const NOTES_API = 'http://127.0.0.1:23456/api/notes';
 const SAVE_TRIGGER_MARKER = '[RC_XHS_SAVE_TRIGGER]';
+
+function isNativeWebviewHandle(value: WebViewElement | null): boolean {
+    return Boolean(
+        value
+        && typeof value.loadURL === 'function'
+        && typeof value.reload === 'function'
+        && typeof value.executeJavaScript === 'function',
+    );
+}
+
+function isIframeHandle(value: WebViewElement | null): value is HTMLIFrameElement {
+    if (!value || typeof (value as { tagName?: unknown }).tagName !== 'string') return false;
+    return (value as { tagName: string }).tagName.toLowerCase() === 'iframe';
+}
 
 const XHS_SHARED_SCRIPT = `
 function parseCountText(value) {
@@ -859,6 +874,7 @@ function formatTabTitle(title: string, url: string): string {
 function ManagedWebview({
     tab,
     onRefChange,
+    onRuntimeModeChange,
     onElementLayout,
     onDidStartLoading,
     onDidStopLoading,
@@ -902,26 +918,73 @@ function ManagedWebview({
         const host = hostRef.current;
         if (!host) return;
 
-        const webview = document.createElement('webview') as WebViewElement;
-        webview.setAttribute('src', tab.url);
-        webview.setAttribute('webpreferences', 'contextIsolation=yes');
-        webview.setAttribute('allowpopups', 'true');
-        webview.setAttribute('autosize', 'on');
-        webview.style.position = 'absolute';
-        webview.style.top = '0';
-        webview.style.right = '0';
-        webview.style.bottom = '0';
-        webview.style.left = '0';
-        webview.style.display = 'inline-flex';
-        webview.style.width = '100%';
-        webview.style.height = '100%';
+        const maybeWebview = document.createElement('webview') as WebViewElement;
+        const supportsNativeWebview = isNativeWebviewHandle(maybeWebview);
+        onRuntimeModeChange(tab.id, supportsNativeWebview);
 
-        host.appendChild(webview);
-        webviewRef.current = webview;
-        onRefChange(tab.id, webview);
+        if (!supportsNativeWebview) {
+            const iframe = document.createElement('iframe');
+            iframe.src = tab.url;
+            iframe.setAttribute('title', tab.title || 'XHS Browser');
+            iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+            iframe.style.position = 'absolute';
+            iframe.style.top = '0';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.left = '0';
+            iframe.style.display = 'inline-flex';
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = '0';
+
+            const handleLoad = () => {
+                onDidStopLoading(tab.id);
+                onDidNavigate(tab.id, iframe.src || tab.url);
+                onTitleUpdated(tab.id, iframe.src || '网页');
+                onDomReady(tab.id);
+            };
+
+            const handleError = () => {
+                onDidStopLoading(tab.id);
+            };
+
+            host.appendChild(iframe);
+            iframe.addEventListener('load', handleLoad);
+            iframe.addEventListener('error', handleError);
+            webviewRef.current = iframe as unknown as WebViewElement;
+            onRefChange(tab.id, iframe as unknown as WebViewElement);
+            onDidStartLoading(tab.id);
+
+            return () => {
+                onRefChange(tab.id, null);
+                iframe.removeEventListener('load', handleLoad);
+                iframe.removeEventListener('error', handleError);
+                if (host.contains(iframe)) {
+                    host.removeChild(iframe);
+                }
+                webviewRef.current = null;
+            };
+        }
+
+        maybeWebview.setAttribute('src', tab.url);
+        maybeWebview.setAttribute('webpreferences', 'contextIsolation=yes');
+        maybeWebview.setAttribute('allowpopups', 'true');
+        maybeWebview.setAttribute('autosize', 'on');
+        maybeWebview.style.position = 'absolute';
+        maybeWebview.style.top = '0';
+        maybeWebview.style.right = '0';
+        maybeWebview.style.bottom = '0';
+        maybeWebview.style.left = '0';
+        maybeWebview.style.display = 'inline-flex';
+        maybeWebview.style.width = '100%';
+        maybeWebview.style.height = '100%';
+
+        host.appendChild(maybeWebview);
+        webviewRef.current = maybeWebview;
+        onRefChange(tab.id, maybeWebview);
         try {
-            if (typeof webview.setMaxListeners === 'function') {
-                webview.setMaxListeners(32);
+            if (typeof maybeWebview.setMaxListeners === 'function') {
+                maybeWebview.setMaxListeners(32);
             }
         } catch {
             // ignore
@@ -929,12 +992,12 @@ function ManagedWebview({
 
         return () => {
             onRefChange(tab.id, null);
-            if (host.contains(webview)) {
-                host.removeChild(webview);
+            if (host.contains(maybeWebview)) {
+                host.removeChild(maybeWebview);
             }
             webviewRef.current = null;
         };
-    }, [tab.id, onRefChange]);
+    }, [tab.id, onDidNavigate, onDidStartLoading, onDidStopLoading, onDomReady, onRefChange, onRuntimeModeChange, onTitleUpdated]);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -951,11 +1014,13 @@ function ManagedWebview({
             webview.style.height = `${height}px`;
             webview.style.minWidth = `${width}px`;
             webview.style.minHeight = `${height}px`;
-            webview.setAttribute('autosize', 'on');
-            webview.setAttribute('minwidth', `${width}`);
-            webview.setAttribute('minheight', `${height}`);
-            webview.setAttribute('maxwidth', `${width}`);
-            webview.setAttribute('maxheight', `${height}`);
+            if (isNativeWebviewHandle(webview)) {
+                webview.setAttribute('autosize', 'on');
+                webview.setAttribute('minwidth', `${width}`);
+                webview.setAttribute('minheight', `${height}`);
+                webview.setAttribute('maxwidth', `${width}`);
+                webview.setAttribute('maxheight', `${height}`);
+            }
 
             const webviewRect = webview.getBoundingClientRect();
             onElementLayout(tab.id, {
@@ -979,7 +1044,7 @@ function ManagedWebview({
 
     useEffect(() => {
         const webview = webviewRef.current;
-        if (!webview) return;
+        if (!webview || !isNativeWebviewHandle(webview)) return;
 
         const handleDidStartLoading = () => onDidStartLoading(tab.id);
         const handleDidStopLoading = () => onDidStopLoading(tab.id);
@@ -1031,6 +1096,7 @@ export function XhsBrowser() {
     const [addressInput, setAddressInput] = useState(DEFAULT_URL);
     const [layoutSnapshots, setLayoutSnapshots] = useState<Record<string, LayoutSnapshot>>({});
     const [elementSnapshots, setElementSnapshots] = useState<Record<string, ElementLayoutSnapshot>>({});
+    const [runtimeModes, setRuntimeModes] = useState<Record<string, 'webview' | 'iframe'>>({});
 
     const webviewRefs = useRef<Record<string, WebViewElement | null>>({});
     const detectTimerRef = useRef<Record<string, number>>({});
@@ -1072,7 +1138,7 @@ export function XhsBrowser() {
 
     const runScriptInTab = useCallback(async <T,>(tabId: string, script: string): Promise<T | null> => {
         const webview = webviewRefs.current[tabId];
-        if (!webview) return null;
+        if (!webview || !isNativeWebviewHandle(webview)) return null;
 
         try {
             const result = await webview.executeJavaScript(script);
@@ -1097,7 +1163,7 @@ export function XhsBrowser() {
         const patch: Partial<BrowserTab> = {};
 
         try {
-            const currentUrl = webview.getURL?.();
+            const currentUrl = isNativeWebviewHandle(webview) ? webview.getURL?.() : (isIframeHandle(webview) ? webview.src : undefined);
             if (currentUrl) {
                 patch.url = currentUrl;
             }
@@ -1112,8 +1178,8 @@ export function XhsBrowser() {
         }
 
         try {
-            patch.canGoBack = Boolean(webview.canGoBack?.());
-            patch.canGoForward = Boolean(webview.canGoForward?.());
+            patch.canGoBack = isNativeWebviewHandle(webview) ? Boolean(webview.canGoBack?.()) : false;
+            patch.canGoForward = isNativeWebviewHandle(webview) ? Boolean(webview.canGoForward?.()) : false;
         } catch {
             patch.canGoBack = false;
             patch.canGoForward = false;
@@ -1297,6 +1363,11 @@ export function XhsBrowser() {
     const handleCloseTab = useCallback((tabId: string) => {
         clearTimersForTab(tabId);
         delete webviewRefs.current[tabId];
+        setRuntimeModes((prev) => {
+            const next = { ...prev };
+            delete next[tabId];
+            return next;
+        });
 
         setTabs(prev => {
             if (prev.length === 1) {
@@ -1333,6 +1404,10 @@ export function XhsBrowser() {
         webviewRefs.current[tabId] = webview;
     }, []);
 
+    const handleRuntimeModeChange = useCallback((tabId: string, isNativeWebview: boolean) => {
+        setRuntimeModes((prev) => ({ ...prev, [tabId]: isNativeWebview ? 'webview' : 'iframe' }));
+    }, []);
+
     const handleElementLayout = useCallback((tabId: string, snapshot: ElementLayoutSnapshot) => {
         setElementSnapshots(prev => ({ ...prev, [tabId]: snapshot }));
     }, []);
@@ -1345,10 +1420,15 @@ export function XhsBrowser() {
         const targetUrl = normalizeUrl(addressInput);
         const webview = webviewRefs.current[activeTabId];
 
-        updateTab(activeTabId, { url: targetUrl, note: null });
+        updateTab(activeTabId, { url: targetUrl, note: null, isLoading: true });
 
-        if (webview && typeof webview.loadURL === 'function') {
+        if (isNativeWebviewHandle(webview)) {
             webview.loadURL(targetUrl);
+            return;
+        }
+
+        if (isIframeHandle(webview)) {
+            webview.src = targetUrl;
             return;
         }
 
@@ -1361,7 +1441,7 @@ export function XhsBrowser() {
         if (!activeTabId) return;
 
         const webview = webviewRefs.current[activeTabId];
-        if (!webview?.canGoBack?.()) return;
+        if (!isNativeWebviewHandle(webview) || !webview.canGoBack?.()) return;
 
         webview.goBack();
         window.setTimeout(() => syncTabNavState(activeTabId), 120);
@@ -1371,7 +1451,7 @@ export function XhsBrowser() {
         if (!activeTabId) return;
 
         const webview = webviewRefs.current[activeTabId];
-        if (!webview?.canGoForward?.()) return;
+        if (!isNativeWebviewHandle(webview) || !webview.canGoForward?.()) return;
 
         webview.goForward();
         window.setTimeout(() => syncTabNavState(activeTabId), 120);
@@ -1383,8 +1463,16 @@ export function XhsBrowser() {
         const webview = webviewRefs.current[activeTabId];
         if (!webview) return;
 
-        webview.reload();
-    }, [activeTabId]);
+        if (isNativeWebviewHandle(webview)) {
+            webview.reload();
+            return;
+        }
+
+        if (isIframeHandle(webview)) {
+            updateTab(activeTabId, { isLoading: true });
+            webview.src = webview.src || activeTab?.url || DEFAULT_URL;
+        }
+    }, [activeTab?.url, activeTabId, updateTab]);
 
     const handleDidStartLoading = useCallback((tabId: string) => {
         updateTab(tabId, { isLoading: true });
@@ -1431,6 +1519,7 @@ export function XhsBrowser() {
     const activeNote = activeTab?.note ?? null;
     const activeLayoutSnapshot = activeTab ? layoutSnapshots[activeTab.id] : undefined;
     const activeElementSnapshot = activeTab ? elementSnapshots[activeTab.id] : undefined;
+    const activeRuntimeMode = activeTab ? (runtimeModes[activeTab.id] ?? 'webview') : 'webview';
 
     return (
         <div className="flex-1 min-h-0 flex flex-col bg-surface-primary">
@@ -1514,6 +1603,7 @@ export function XhsBrowser() {
                         key={activeTab.id}
                         tab={activeTab}
                         onRefChange={handleRefChange}
+                        onRuntimeModeChange={handleRuntimeModeChange}
                         onElementLayout={handleElementLayout}
                         onDidStartLoading={handleDidStartLoading}
                         onDidStopLoading={handleDidStopLoading}
@@ -1542,6 +1632,11 @@ export function XhsBrowser() {
                         刷新检测
                     </button>
                     <span className="text-xs text-text-tertiary">小红书浏览器</span>
+                    {activeRuntimeMode === 'iframe' && (
+                        <span className="text-[11px] text-amber-600">
+                            Web 环境已降级为 iframe，部分站点可能限制内嵌与采集能力
+                        </span>
+                    )}
                     {activeLayoutSnapshot && (
                         <span className="text-[11px] text-text-tertiary">
                             WV {activeLayoutSnapshot.width}x{activeLayoutSnapshot.height} · VP {activeLayoutSnapshot.viewportWidth}
