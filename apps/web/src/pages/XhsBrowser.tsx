@@ -740,7 +740,7 @@ const INJECT_SAVE_BUTTON_SCRIPT = `
     return { success: false, reason: 'not-xhs' };
   }
 
-  const BTN_ID = 'redconvert-save-button';
+  const BTN_ID = 'carred-save-button';
 
   const findFollowButton = () => {
     const byClass = document.querySelector('button.follow-button');
@@ -765,7 +765,7 @@ const INJECT_SAVE_BUTTON_SCRIPT = `
   saveButton.classList.remove('follow-button');
   saveButton.style.marginLeft = '8px';
   saveButton.setAttribute('type', 'button');
-  saveButton.dataset.redconvertState = 'idle';
+  saveButton.dataset.carredState = 'idle';
 
   const textEl = saveButton.querySelector('.reds-button-new-text');
   if (textEl) {
@@ -777,7 +777,7 @@ const INJECT_SAVE_BUTTON_SCRIPT = `
   saveButton.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (saveButton.dataset.redconvertState === 'saving') return;
+    if (saveButton.dataset.carredState === 'saving') return;
     console.log('${SAVE_TRIGGER_MARKER}');
   });
 
@@ -810,10 +810,10 @@ function buildSetInjectedButtonStateScript(status: SaveStatus): string {
 
     return `
 (() => {
-  const saveButton = document.getElementById('redconvert-save-button');
+  const saveButton = document.getElementById('carred-save-button');
   if (!saveButton) return false;
 
-  saveButton.dataset.redconvertState = '${status}';
+  saveButton.dataset.carredState = '${status}';
   if (${disabled}) {
     saveButton.setAttribute('disabled', 'true');
   } else {

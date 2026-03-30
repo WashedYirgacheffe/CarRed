@@ -746,30 +746,21 @@ export function Settings() {
               <section className="space-y-6">
                 <h2 className="text-lg font-medium text-text-primary mb-6">常规设置</h2>
 
-                {/* 版本信息与更新 */}
+                {/* 版本信息 */}
                 <div className="bg-surface-secondary/30 rounded-lg border border-border p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="text-sm font-medium text-text-primary flex items-center gap-2">
                         <Info className="w-4 h-4" />
-                        红盒子 RedBox
+                        CarRed
                       </h3>
                       <p className="text-xs text-text-tertiary mt-1">
                         当前版本: <span className="font-mono">{appVersion || '加载中...'}</span>
                       </p>
                       <p className="text-xs text-text-tertiary mt-1">
-                        自动更新已关闭，请前往 GitHub Releases 手动下载新版本。
+                        carred.carlab.top · AI 内容创作云端工作区
                       </p>
                     </div>
-                    <a
-                      href="https://github.com/Jamailar/RedBox/releases"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-2 px-3 py-1.5 border border-border text-text-primary text-xs font-medium rounded hover:bg-surface-secondary"
-                    >
-                      <Download className="w-3 h-3" />
-                      打开下载页
-                    </a>
                   </div>
                 </div>
 
@@ -778,7 +769,7 @@ export function Settings() {
                     数据存储路径
                   </label>
                   <p className="text-[10px] text-text-tertiary mb-2">
-                    技能和知识库文件将保存在此目录下。留空则使用默认目录 ~/.redconvert
+                    技能和知识库文件将保存在此目录下。留空则使用默认目录 ~/.carred
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 relative">
@@ -787,7 +778,7 @@ export function Settings() {
                         type="text"
                         value={formData.workspace_dir}
                         onChange={e => setFormData(d => ({ ...d, workspace_dir: e.target.value }))}
-                        placeholder="~/.redconvert"
+                        placeholder="~/.carred"
                         className="w-full bg-surface-secondary/30 rounded border border-border pl-10 pr-3 py-2 text-sm focus:outline-none focus:border-accent-primary transition-colors"
                       />
                     </div>

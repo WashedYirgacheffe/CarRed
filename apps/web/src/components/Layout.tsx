@@ -191,8 +191,8 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
       <aside className="w-48 bg-surface-secondary border-r border-border flex flex-col">
         {/* App Title */}
         <div className="h-12 flex items-center px-4 border-b border-border/50">
-          <img src={appLogo} alt="RedBox" className="w-5 h-5 mr-2" />
-          <span className="font-semibold text-sm">红盒子</span>
+          <img src={appLogo} alt="CarRed" className="w-5 h-5 mr-2" />
+          <span className="font-semibold text-sm">CarRed</span>
         </div>
 
         {/* Navigation */}

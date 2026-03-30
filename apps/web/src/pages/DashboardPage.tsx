@@ -4,7 +4,7 @@ export default function DashboardPage() {
   return (
     <div className="page">
       <h1>CarRed</h1>
-      <p className="sub">RedBox online migration - cloud workspace edition.</p>
+      <p className="sub">AI 内容创作云端工作区</p>
       <div className="tools-grid">
         <ToolCard to="/chat" title="Chat" desc="Agent chat with queued worker execution." />
         <ToolCard to="/knowledge" title="Knowledge" desc="Knowledge ingestion and retrieval entrance." />
