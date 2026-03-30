@@ -42,29 +42,34 @@ function App() {
 
   useEffect(() => {
     const init = async () => {
-      // 优先：从 URL hash 读取 access_token（从 TapLater SSO 跳转而来）
-      const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
-      if (hash.includes('access_token=')) {
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (accessToken && refreshToken) {
-          const { data } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-          if (data.session) {
-            saveToken(data.session.access_token);
-            window.history.replaceState(null, '', window.location.pathname + window.location.search);
-            setAuthed(true);
-            return;
+      try {
+        // 优先：从 URL hash 读取 access_token（从 TapLater SSO 跳转而来）
+        const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+        if (hash.includes('access_token=')) {
+          const params = new URLSearchParams(hash);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          if (accessToken && refreshToken) {
+            const { data } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+            if (data.session) {
+              saveToken(data.session.access_token);
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+              setAuthed(true);
+              return;
+            }
           }
         }
-      }
 
-      // 其次：从 cookie/localStorage 读取已有 session
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        saveToken(data.session.access_token);
-        setAuthed(true);
-      } else {
+        // 其次：从 cookie/localStorage 读取已有 session
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          saveToken(data.session.access_token);
+          setAuthed(true);
+        } else {
+          setAuthed(false);
+        }
+      } catch {
+        // Supabase 初始化失败（如 env 变量缺失）→ 降级到登录页
         setAuthed(false);
       }
     };
