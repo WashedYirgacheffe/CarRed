@@ -12,5 +12,5 @@ export const noStore = (res: VercelResponse) => {
 export const setCors = (res: VercelResponse) => {
   res.setHeader('Access-Control-Allow-Origin', env.allowedOrigin);
   res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 };

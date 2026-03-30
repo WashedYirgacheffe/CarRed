@@ -504,6 +504,15 @@ const notMigrated = async (feature: string) => {
 const handleInvoke = async (channel: string, ...args: unknown[]): Promise<unknown> => {
   switch (channel) {
     case 'spaces:list': {
+      if (API_BASE && getAccessToken()) {
+        try {
+          const data = await requestJson('/api/spaces', { method: 'GET' }) as SpaceRecord[];
+          if (Array.isArray(data) && data.length > 0) {
+            writeJson(SPACES_KEY, data);
+            return { spaces: data, activeSpaceId: getActiveSpaceId() };
+          }
+        } catch {}
+      }
       const spaces = ensureSpaces();
       return { spaces, activeSpaceId: getActiveSpaceId() };
     }
@@ -519,6 +528,16 @@ const handleInvoke = async (channel: string, ...args: unknown[]): Promise<unknow
     case 'spaces:create': {
       const name = String(args[0] || '').trim();
       if (!name) return { success: false, error: 'Space name is required' };
+      if (API_BASE && getAccessToken()) {
+        try {
+          const created = await requestJson('/api/spaces', {
+            method: 'POST',
+            body: JSON.stringify({ name }),
+          }) as SpaceRecord;
+          writeJson(SPACES_KEY, [...ensureSpaces(), created]);
+          return { success: true, space: created };
+        } catch {}
+      }
       const spaces = ensureSpaces();
       const newSpace = { id: randomId('space'), name };
       writeJson(SPACES_KEY, [...spaces, newSpace]);
@@ -734,10 +753,35 @@ const handleInvoke = async (channel: string, ...args: unknown[]): Promise<unknow
     }
 
     case 'advisors:list': {
+      if (API_BASE && getAccessToken()) {
+        try {
+          const data = await requestJson('/api/advisors', { method: 'GET' }) as Advisor[];
+          if (Array.isArray(data)) {
+            writeJson(ADVISORS_KEY, data);
+            return data;
+          }
+        } catch {}
+      }
       return listAdvisors();
     }
     case 'advisors:create': {
       const payload = (args[0] || {}) as Partial<Advisor>;
+      if (API_BASE && getAccessToken()) {
+        try {
+          const created = await requestJson('/api/advisors', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: String(payload.name || '新智囊'),
+              avatar: String(payload.avatar || '智'),
+              personality: String(payload.personality || ''),
+              prompt: String(payload.prompt || ''),
+              youtube_channel: String(payload.youtubeChannel || ''),
+            }),
+          }) as Advisor;
+          writeJson(ADVISORS_KEY, [...listAdvisors(), created]);
+          return { success: true, id: created.id };
+        } catch {}
+      }
       const next: Advisor = {
         id: randomId('advisor'),
         name: String(payload.name || '新智囊'),
@@ -751,6 +795,20 @@ const handleInvoke = async (channel: string, ...args: unknown[]): Promise<unknow
     case 'advisors:update': {
       const payload = (args[0] || {}) as Partial<Advisor> & { id?: string };
       const id = String(payload.id || '');
+      if (API_BASE && getAccessToken() && id) {
+        try {
+          await requestJson(`/api/advisors/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              name: payload.name,
+              avatar: payload.avatar,
+              personality: payload.personality,
+              prompt: payload.prompt,
+              youtube_channel: payload.youtubeChannel,
+            }),
+          });
+        } catch {}
+      }
       const list = listAdvisors();
       const index = list.findIndex((advisor) => advisor.id === id);
       if (index < 0) return { success: false, error: 'Advisor not found' };
@@ -760,6 +818,9 @@ const handleInvoke = async (channel: string, ...args: unknown[]): Promise<unknow
     }
     case 'advisors:delete': {
       const id = String(args[0] || '');
+      if (API_BASE && getAccessToken() && id) {
+        requestJson(`/api/advisors/${id}`, { method: 'DELETE' }).catch(() => {});
+      }
       writeJson(ADVISORS_KEY, listAdvisors().filter((advisor) => advisor.id !== id));
       return { success: true };
     }
@@ -938,7 +999,21 @@ const chatApi = {
   send: async (payload: ChatSendPayload) => {
     let sessionId = payload.sessionId;
     if (!sessionId) {
-      const created = createSessionRecord('New Chat');
+      let created: ChatSessionRecord;
+      if (API_BASE && getAccessToken()) {
+        try {
+          const data = await requestJson('/api/chat/sessions', {
+            method: 'POST',
+            body: JSON.stringify({ title: 'New Chat' }),
+          }) as { id: string; title: string; updated_at: string };
+          created = { id: data.id, title: data.title, updatedAt: data.updated_at };
+          writeSessions([created, ...readSessions()]);
+        } catch {
+          created = createSessionRecord('New Chat');
+        }
+      } else {
+        created = createSessionRecord('New Chat');
+      }
       sessionId = created.id;
       emit('chat:session-title-updated', { sessionId, title: created.title });
     }
@@ -1045,9 +1120,34 @@ const chatApi = {
     // No-op in browser bridge for now
   },
 
-  getSessions: async () => readSessions(),
+  getSessions: async () => {
+    if (API_BASE && getAccessToken()) {
+      try {
+        const data = await requestJson('/api/chat/sessions', { method: 'GET' }) as Array<{ id: string; title: string; updated_at: string }>;
+        if (Array.isArray(data)) {
+          const sessions: ChatSessionRecord[] = data.map(s => ({ id: s.id, title: s.title, updatedAt: s.updated_at }));
+          writeSessions(sessions);
+          return sessions;
+        }
+      } catch {}
+    }
+    return readSessions();
+  },
 
-  createSession: async (title?: string) => createSessionRecord(title || 'New Chat'),
+  createSession: async (title?: string) => {
+    if (API_BASE && getAccessToken()) {
+      try {
+        const created = await requestJson('/api/chat/sessions', {
+          method: 'POST',
+          body: JSON.stringify({ title: title || 'New Chat' }),
+        }) as { id: string; title: string; updated_at: string };
+        const session: ChatSessionRecord = { id: created.id, title: created.title, updatedAt: created.updated_at };
+        writeSessions([session, ...readSessions()]);
+        return session;
+      } catch {}
+    }
+    return createSessionRecord(title || 'New Chat');
+  },
 
   getOrCreateContextSession: async (params: { contextId: string; contextType: string; title: string; initialContext: string }) => {
     const key = `${params.contextType}:${params.contextId}`;
@@ -1070,12 +1170,26 @@ const chatApi = {
   },
 
   deleteSession: async (sessionId: string) => {
+    if (API_BASE && getAccessToken()) {
+      requestJson(`/api/chat/sessions/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+    }
     writeSessions(readSessions().filter((session) => session.id !== sessionId));
     localStorage.removeItem(`${CHAT_SESSIONS_KEY}.${sessionId}.messages`);
     return { success: true };
   },
 
-  getMessages: async (sessionId: string) => readSessionMessages(sessionId),
+  getMessages: async (sessionId: string) => {
+    if (API_BASE && getAccessToken()) {
+      try {
+        const data = await requestJson(`/api/chat/sessions/${sessionId}`, { method: 'GET' }) as { messages: StoredChatMessage[] };
+        if (Array.isArray(data?.messages) && data.messages.length > 0) {
+          writeSessionMessages(sessionId, data.messages);
+          return data.messages;
+        }
+      } catch {}
+    }
+    return readSessionMessages(sessionId);
+  },
 
   clearMessages: async (sessionId: string) => {
     writeSessionMessages(sessionId, []);
@@ -1133,9 +1247,23 @@ const browserIpcRenderer = {
   saveSettings: async (settings: Record<string, unknown>) => {
     const merged = { ...DEFAULT_SETTINGS, ...settings };
     writeJson(SETTINGS_KEY, merged);
+    if (API_BASE && getAccessToken()) {
+      requestJson('/api/settings', { method: 'PUT', body: JSON.stringify({ data: merged }) }).catch(() => {});
+    }
     return { success: true };
   },
-  getSettings: async () => ({ ...DEFAULT_SETTINGS, ...readJson<Record<string, unknown>>(SETTINGS_KEY, {}) }),
+  getSettings: async () => {
+    if (API_BASE && getAccessToken()) {
+      try {
+        const result = await requestJson('/api/settings', { method: 'GET' });
+        const data = (result as any)?.data ?? {};
+        const merged = { ...DEFAULT_SETTINGS, ...data };
+        writeJson(SETTINGS_KEY, merged);
+        return merged;
+      } catch {}
+    }
+    return { ...DEFAULT_SETTINGS, ...readJson<Record<string, unknown>>(SETTINGS_KEY, {}) };
+  },
   getAppVersion: async () => 'web-preview',
   fetchModels: async () => [{ id: 'gpt-5' }, { id: 'gpt-4.1' }],
   detectAiProtocol: async (config: { protocol?: string }) => {
